@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Futsal Master Club</title>
+    <style>
+        :root { --primary: #00ff88; --bg: #0f172a; --card: #1e293b; --text: #f8fafc; }
+        body { margin: 0; background: var(--bg); color: var(--text); font-family: sans-serif; overflow: hidden; }
+        
+        /* Botón Flotante Arrastrable */
+        #drag-btn { 
+            position: fixed; top: 20px; left: 20px; z-index: 1000; 
+            width: 60px; height: 60px; background: var(--primary); 
+            border-radius: 50%; display: flex; align-items: center; 
+            justify-content: center; font-size: 30px; cursor: move;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5); touch-action: none;
+        }
+
+        /* Pantallas */
+        .screen { display: none; position: fixed; inset: 0; padding: 20px; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+        #screen-intro { background: var(--bg); z-index: 2000; display: flex; }
+        
+        /* Animación de Pelota */
+        .ball { font-size: 50px; animation: bounce 1s infinite alternate; }
+        @keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-30px); } }
+
+        /* Tarjetas de Categoría */
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; width: 100%; max-width: 400px; }
+        .card { background: var(--card); padding: 25px 10px; border-radius: 15px; border: 2px solid #334155; font-weight: bold; }
+        
+        /* Juego */
+        .progress-bar { width: 100%; height: 10px; background: #334155; border-radius: 5px; margin-bottom: 20px; overflow: hidden; }
+        #bar-fill { width: 0%; height: 100%; background: var(--primary); transition: 0.5s; }
+        .btn-opt { width: 100%; background: var(--card); color: white; border: 1px solid #475569; padding: 15px; margin: 5px 0; border-radius: 10px; font-size: 16px; }
+    </style>
+</head>
+<body>
+
+    <div id="drag-btn">⚽</div>
+
+    <div id="screen-intro" class="screen">
+        <div class="ball">⚽</div>
+        <h2 id="intro-msg">CALENTANDO...</h2>
+    </div>
+
+    <div id="screen-menu" class="screen">
+        <h1 style="color:var(--primary)">FUTSAL MASTER</h1>
+        <p>Elige bloque inicial:</p>
+        <div class="grid">
+            <div class="card" onclick="startRonda('reglamento')">⚖️<br>Reglas</div>
+            <div class="card" onclick="startRonda('tactica')">📋<br>Táctica</div>
+            <div class="card" onclick="startRonda('historia')">🌍<br>Historia</div>
+            <div class="card" onclick="startRonda('mi_club')">🛡️<br>Mi Club</div>
+        </div>
+    </div>
+
+    <div id="screen-game" class="screen">
+        <div class="progress-bar"><div id="bar-fill"></div></div>
+        <div id="badge" style="color:var(--primary); font-weight:bold; margin-bottom:10px;"></div>
+        <h2 id="q-text"></h2>
+        <div id="options" style="width:100%; max-width:400px;"></div>
+    </div>
+
+<script>
+// BANCO DE DATOS (AQUÍ PEGARÁS TUS 600 PREGUNTAS)
+const BANCO = {
+    reglamento: [
+        {q: "¿Cuánto dura la cuenta del portero?", a: ["4s", "5s", "6s"], c: 0},
+        {q: "¿Distancia del doble penalti?", a: ["8m", "10m", "12m"], c: 1},
+        {q: "¿Es gol de banda directo?", a: ["Sí", "No", "Solo si toca palo"], c: 1},
+        {q: "¿Faltas para doble penalti?", a: ["5", "6", "7"], c: 1},
+        {q: "¿Tiempo de saque de banda?", a: ["4s", "5s", "3s"], c: 0}
+    ],
+    tactica: [
+        {q: "¿Qué es el sistema 3-1?", a: ["Con pívot", "Sin pívot", "Portero-jugador"], c: 0},
+        {q: "¿Qué es una paralela?", a: ["Pase en banda", "Regate", "Tipo de bota"], c: 0},
+        {q: "¿Función del cierre?", a: ["Golear", "Organizar", "Parar"], c: 1},
+        {q: "¿Defensa en rombo?", a: ["1-2-1", "2-2", "3-1"], c: 0}
+    ],
+    historia: [{q:"¿País origen?", a:["Brasil","Uruguay","España"], c:1}],
+    mi_club: [{q:"¿Año fundación?", a:["1990","2000","2010"], c:1}]
+};
+
+const MSJS = {
+    reglamento: "⚖️ REPASANDO REGLAS... ¡Cuidado con la 6ª!",
+    tactica: "📋 PIZARRA EN MANO... Analizando rotaciones.",
+    historia: "🌍 VIAJANDO AL PASADO... Leyendas del 40x20.",
+    mi_club: "🛡️ ADN DEL CLUB... Demuestra tus colores."
+};
+
+let currentCat = 'reglamento';
+let qInRound = 0;
+let totalSolved = 0;
+let cats = ['reglamento', 'tactica', 'historia', 'mi_club'];
+
+// Lógica de Arrastre (Móvil y PC)
+const btn = document.getElementById("drag-btn");
+btn.addEventListener('touchmove', function(e) {
+    let touch = e.touches[0];
+    btn.style.left = (touch.clientX - 30) + 'px';
+    btn.style.top = (touch.clientY - 30) + 'px';
+}, false);
+
+btn.onclick = () => {
+    document.getElementById('screen-intro').style.display = 'flex';
+    setTimeout(() => {
+        document.getElementById('screen-intro').style.display = 'none';
+        document.getElementById('screen-menu').style.display = 'flex';
+    }, 2000);
+};
+
+function startRonda(cat) {
+    currentCat = cat;
+    qInRound = 0;
+    document.getElementById('screen-menu').style.display = 'none';
+    playLoop();
+}
+
+function playLoop() {
+    if(qInRound >= 4) {
+        qInRound = 0;
+        let nextIdx = (cats.indexOf(currentCat) + 1) % 4;
+        currentCat = cats[nextIdx];
+        showTransition();
+        return;
+    }
+    showQuestion();
+}
+
+function showTransition() {
+    const intro = document.getElementById('screen-intro');
+    document.getElementById('intro-msg').innerText = MSJS[currentCat];
+    document.getElementById('screen-game').style.display = 'none';
+    intro.style.display = 'flex';
+    setTimeout(() => {
+        intro.style.display = 'none';
+        document.getElementById('screen-game').style.display = 'flex';
+        showQuestion();
+    }, 4000);
+}
+
+function showQuestion() {
+    document.getElementById('screen-game').style.display = 'flex';
+    const data = BANCO[currentCat][Math.floor(Math.random()*BANCO[currentCat].length)];
+    document.getElementById('badge').innerText = currentCat.toUpperCase();
+    document.getElementById('q-text').innerText = data.q;
+    const opts = document.getElementById('options');
+    opts.innerHTML = '';
+    data.a.forEach((txt, i) => {
+        const b = document.createElement('button');
+        b.className = 'btn-opt';
+        b.innerText = txt;
+        b.onclick = () => {
+            if(i === data.c) b.style.background = '#059669';
+            else b.style.background = '#dc2626';
+            totalSolved++;
+            qInRound++;
+            document.getElementById('bar-fill').style.width = (totalSolved/600*100)+'%';
+            setTimeout(playLoop, 1000);
+        };
+        opts.appendChild(b);
+    });
+}
+</script>
+</body>
+</html>
